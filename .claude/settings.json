@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "A file was just modified. The tool event data is: $ARGUMENTS\n\nStep 1: Check whether tool_input.file_path contains 'index.html'. If it does NOT, output only the word SKIP and stop immediately — do not read any files.\n\nStep 2: If the path does contain 'index.html', read the file at that path. Then run a focused audit of the change for these four checks:\n\n1. XSS — is every piece of user-supplied content (note title, note body) passed through escHtml() before being set as innerHTML?\n2. Persistence — does every mutation to the notes array call persist()?\n3. Render — does every state change that affects the UI call renderNotes() (or update the DOM directly)?\n4. Crash risks — are there any unguarded JSON.parse calls, unhandled errors, or localStorage operations without try/catch?\n\nReport each finding as:\n[HIGH|MEDIUM|LOW] Short title\nLocation: function or element\nIssue: one sentence\nFix: one sentence\n\nIf no issues are found, output a single line: 'No new issues found in index.html.'",
+            "statusMessage": "Auditing index.html...",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}
