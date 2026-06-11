@@ -290,6 +290,28 @@
 
     .empty .icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
 
+    .loading-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--text-muted);
+      grid-column: 1 / -1;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 2rem;
+      height: 2rem;
+      border: 3px solid var(--border);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-bottom: 0.75rem;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; }
     }
@@ -320,6 +342,7 @@
 
   <script>
     let notes = [];
+    let loading = true;
     let activeTag = null;
     const _debounceTimers = {};
 
@@ -341,6 +364,7 @@
         const res = await fetch('/api/notes');
         notes = await res.json();
       } catch { notes = []; }
+      loading = false;
       renderNotes();
     }
 
@@ -427,6 +451,14 @@
 
       document.getElementById('countLabel').textContent =
         filtered.length === 0 ? '' : `${filtered.length} note${filtered.length !== 1 ? 's' : ''}`;
+
+      if (loading) {
+        grid.innerHTML = `<div class="loading-state">
+          <div class="spinner"></div>
+          <div>Loading notes…</div>
+        </div>`;
+        return;
+      }
 
       if (filtered.length === 0) {
         grid.innerHTML = `<div class="empty" style="grid-column:1/-1">
