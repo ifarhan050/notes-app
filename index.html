@@ -290,6 +290,45 @@
 
     .empty .icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
 
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e1e3a;
+      color: #e2e8f0;
+      padding: 0.65rem 1rem 0.65rem 1.2rem;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      z-index: 1000;
+      animation: toastIn 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .toast.hiding { animation: toastOut 0.2s ease forwards; }
+
+    .btn-undo {
+      background: transparent;
+      color: #a5b4fc;
+      border: 1.5px solid #4f46e5;
+      padding: 0.25rem 0.65rem;
+      font-size: 0.8rem;
+    }
+
+    .btn-undo:hover { background: rgba(99,102,241,0.2); }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    @keyframes toastOut {
+      from { opacity: 1; transform: translateX(-50%) translateY(0); }
+      to   { opacity: 0; transform: translateX(-50%) translateY(10px); }
     .error-banner {
       display: flex;
       align-items: center;
@@ -469,10 +508,64 @@
       }).catch(() => {});
     }
 
+    let _pendingDelete = null;
+
     function deleteNote(id) {
+      const note = notes.find(n => n.id === id);
+      if (!note) return;
+      const noteIndex = notes.indexOf(note);
+      if (_pendingDelete) {
+        clearTimeout(_pendingDelete.timer);
+        fetch(`/api/notes/${_pendingDelete.id}`, { method: 'DELETE' }).catch(() => {});
+        _pendingDelete = null;
+        _removeToast();
+      }
       notes = notes.filter(n => n.id !== id);
       renderNotes();
-      fetch(`/api/notes/${id}`, { method: 'DELETE' }).catch(() => {});
+      _showUndoToast();
+      const timer = setTimeout(() => {
+        fetch(`/api/notes/${id}`, { method: 'DELETE' }).catch(() => {});
+        _hideToast();
+        _pendingDelete = null;
+      }, 5000);
+      _pendingDelete = { id, note, noteIndex, timer };
+    }
+
+    function undoDelete() {
+      if (!_pendingDelete) return;
+      clearTimeout(_pendingDelete.timer);
+      const { note, noteIndex } = _pendingDelete;
+      _pendingDelete = null;
+      notes.splice(noteIndex, 0, note);
+      renderNotes();
+      _hideToast();
+      fetch(`/api/notes/${note.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: note.title, body: note.body, tags: note.tags, updated_at: note.updated_at })
+      }).catch(() => {});
+    }
+
+    function _showUndoToast() {
+      _removeToast();
+      const el = document.createElement('div');
+      el.id = 'undoToast';
+      el.className = 'toast';
+      el.setAttribute('role', 'status');
+      el.innerHTML = '<span>Note deleted</span><button class="btn btn-undo" onclick="undoDelete()">Undo</button>';
+      document.body.appendChild(el);
+    }
+
+    function _removeToast() {
+      const el = document.getElementById('undoToast');
+      if (el) el.remove();
+    }
+
+    function _hideToast() {
+      const el = document.getElementById('undoToast');
+      if (!el) return;
+      el.classList.add('hiding');
+      setTimeout(() => el.remove(), 200);
     }
 
     function setTagFilter(tag) {
