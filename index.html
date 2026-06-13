@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Notes App</title>
+  <link rel="icon" href="data:,">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -329,6 +330,104 @@
 
     .empty .icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
 
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e1e3a;
+      color: #e2e8f0;
+      padding: 0.65rem 1rem 0.65rem 1.2rem;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      z-index: 1000;
+      animation: toastIn 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .toast.hiding { animation: toastOut 0.2s ease forwards; }
+
+    .btn-undo {
+      background: transparent;
+      color: #a5b4fc;
+      border: 1.5px solid #4f46e5;
+      padding: 0.25rem 0.65rem;
+      font-size: 0.8rem;
+    }
+
+    .btn-undo:hover { background: rgba(99,102,241,0.2); }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    @keyframes toastOut {
+      from { opacity: 1; transform: translateX(-50%) translateY(0); }
+      to   { opacity: 0; transform: translateX(-50%) translateY(10px); }
+    .error-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1.5px solid #fca5a5;
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.25rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    [data-theme="dark"] .error-banner {
+      background: #2d1b1b;
+      color: #fca5a5;
+      border-color: #7f1d1d;
+    }
+
+    .error-banner__msg { flex: 1; }
+
+    .error-banner__dismiss {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 1.1rem;
+      line-height: 1;
+      color: inherit;
+      opacity: 0.7;
+      padding: 0 0.2rem;
+      flex-shrink: 0;
+    }
+
+    .error-banner__dismiss:hover { opacity: 1; }
+
+    .loading-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--text-muted);
+      grid-column: 1 / -1;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 2rem;
+      height: 2rem;
+      border: 3px solid var(--border);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-bottom: 0.75rem;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; }
     }
@@ -336,10 +435,11 @@
 </head>
 <body>
   <div class="container">
-    <div class="error-banner" id="errorBanner" style="display:none;">
-      <span id="errorMessage"></span>
-      <button onclick="dismissError()" aria-label="Dismiss error">✕</button>
+    <div id="errorBanner" class="error-banner" hidden>
+      <span class="error-banner__msg" id="errorBannerMsg"></span>
+      <button class="error-banner__dismiss" onclick="dismissErrorBanner()" title="Dismiss" aria-label="Dismiss error">✕</button>
     </div>
+
     <header>
       <div class="header-content">
         <div>
@@ -363,6 +463,7 @@
 
   <script>
     let notes = [];
+    let loading = true;
     let activeTag = null;
     const _debounceTimers = {};
 
@@ -379,15 +480,25 @@
       return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     }
 
+    function showErrorBanner(msg) {
+      const banner = document.getElementById('errorBanner');
+      document.getElementById('errorBannerMsg').textContent = msg;
+      banner.hidden = false;
+    }
+
+    function dismissErrorBanner() {
+      document.getElementById('errorBanner').hidden = true;
+    }
+
     async function loadNotes() {
       try {
         const res = await fetch('/api/notes');
         notes = await res.json();
-        hideErrorBanner();
       } catch {
         notes = [];
         showErrorBanner('Could not connect to server. Please ensure the app is running.');
       }
+      loading = false;
       renderNotes();
     }
 
@@ -454,10 +565,64 @@
       }).catch(() => {});
     }
 
+    let _pendingDelete = null;
+
     function deleteNote(id) {
+      const note = notes.find(n => n.id === id);
+      if (!note) return;
+      const noteIndex = notes.indexOf(note);
+      if (_pendingDelete) {
+        clearTimeout(_pendingDelete.timer);
+        fetch(`/api/notes/${_pendingDelete.id}`, { method: 'DELETE' }).catch(() => {});
+        _pendingDelete = null;
+        _removeToast();
+      }
       notes = notes.filter(n => n.id !== id);
       renderNotes();
-      fetch(`/api/notes/${id}`, { method: 'DELETE' }).catch(() => {});
+      _showUndoToast();
+      const timer = setTimeout(() => {
+        fetch(`/api/notes/${id}`, { method: 'DELETE' }).catch(() => {});
+        _hideToast();
+        _pendingDelete = null;
+      }, 5000);
+      _pendingDelete = { id, note, noteIndex, timer };
+    }
+
+    function undoDelete() {
+      if (!_pendingDelete) return;
+      clearTimeout(_pendingDelete.timer);
+      const { note, noteIndex } = _pendingDelete;
+      _pendingDelete = null;
+      notes.splice(noteIndex, 0, note);
+      renderNotes();
+      _hideToast();
+      fetch(`/api/notes/${note.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: note.title, body: note.body, tags: note.tags, updated_at: note.updated_at })
+      }).catch(() => {});
+    }
+
+    function _showUndoToast() {
+      _removeToast();
+      const el = document.createElement('div');
+      el.id = 'undoToast';
+      el.className = 'toast';
+      el.setAttribute('role', 'status');
+      el.innerHTML = '<span>Note deleted</span><button class="btn btn-undo" onclick="undoDelete()">Undo</button>';
+      document.body.appendChild(el);
+    }
+
+    function _removeToast() {
+      const el = document.getElementById('undoToast');
+      if (el) el.remove();
+    }
+
+    function _hideToast() {
+      const el = document.getElementById('undoToast');
+      if (!el) return;
+      el.classList.add('hiding');
+      setTimeout(() => el.remove(), 200);
     }
 
     function setTagFilter(tag) {
@@ -492,6 +657,14 @@
 
       document.getElementById('countLabel').textContent =
         filtered.length === 0 ? '' : `${filtered.length} note${filtered.length !== 1 ? 's' : ''}`;
+
+      if (loading) {
+        grid.innerHTML = `<div class="loading-state">
+          <div class="spinner"></div>
+          <div>Loading notes…</div>
+        </div>`;
+        return;
+      }
 
       if (filtered.length === 0) {
         grid.innerHTML = `<div class="empty" style="grid-column:1/-1">
