@@ -283,6 +283,45 @@
       border-top: 1px solid var(--border);
     }
 
+    /* Error banner */
+    .error-banner {
+      background: #fef2f2;
+      border: 1.5px solid #fecaca;
+      color: #991b1b;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      animation: slideDown 0.2s ease;
+    }
+
+    [data-theme="dark"] .error-banner {
+      background: #450a0a;
+      border-color: #7f1d1d;
+      color: #fecaca;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .error-banner button {
+      background: transparent;
+      border: none;
+      color: inherit;
+      font-size: 1.2rem;
+      cursor: pointer;
+      opacity: 0.7;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .error-banner button:hover { opacity: 1; }
+
     .empty {
       text-align: center;
       padding: 3rem 1rem;
@@ -461,6 +500,24 @@
       }
       loading = false;
       renderNotes();
+    }
+
+    function showErrorBanner(message) {
+      const banner = document.getElementById('errorBanner');
+      const msg = document.getElementById('errorMessage');
+      if (banner && msg) {
+        msg.textContent = message;
+        banner.style.display = 'flex';
+      }
+    }
+
+    function hideErrorBanner() {
+      const banner = document.getElementById('errorBanner');
+      if (banner) banner.style.display = 'none';
+    }
+
+    function dismissError() {
+      hideErrorBanner();
     }
 
     async function addNote() {
